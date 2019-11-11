@@ -1,0 +1,359 @@
+
+<html>
+<head>
+<title>Javascript simulator</title>
+<style type="text/css">
+body {
+	color:#DDDDDD;
+	background-color:black;
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+	cursor:default;
+}
+h1 {
+	color: #FFFFFF;
+}
+#content-wrapper{
+	position:absolute;
+	left:50%;
+	margin:0;
+	border:0;
+	padding:0;
+	z-index=100;
+}
+#content {
+	position:relative;
+	left:-50%;
+	width:360px;
+	border: 3px dotted #AAAAAA;
+	padding:10px;
+	font-family: Trebuchet MS
+}
+</style>
+<script type="text/javascript">
+var balls = new Array();
+var G = 0.3;
+var PI = 3.1415;
+var wWidth;
+var wHeight;
+var bod;
+var clickX;
+var clickY;
+var mspf=4;//miliseconds per frame
+var currID=0;
+var test = 1;
+var autorun = true;
+var friction = 0.99;
+function initGravity() {
+	bod = document.getElementsByTagName("body")[0];
+	wHeight = bod.clientHeight;
+	wWidth = bod.clientWidth;
+	
+	balls[0] = new Ball(wWidth/2,wHeight/2);
+	balls[0].div.style.fontSize = "500px";
+	balls[0].mass = 20
+	
+	balls[1] = new Ball(wWidth/2+90,wHeight/2);
+	balls[1].speed.y=0.3;	
+	
+	loop();
+}
+
+function Vector(x,y){
+	this.x = x;
+	this.y = y;
+	this.makeUnitVector =  function(){
+		var magnitude = Math.sqrt(Math.pow(this.x,2) + Math.pow(this.y,2));
+		var unitVector = new Vector(this.x/magnitude,this.y/magnitude);
+		return unitVector;
+	}
+	this.dotProduct = function(vector){
+		return (this.x * vector.x + this.y * vector.y);
+	}
+	this.multiply = function(scalar){
+		var returnVector = new Vector(this.x * scalar, this.y * scalar);
+		return returnVector;
+	}
+}
+
+function Ball(x, y) {//
+	this.makePosition = function(){
+		this.div.style.left = (this.position.x-this.div.clientWidth/2)+"px";
+		this.div.style.top = (this.position.y-this.div.clientHeight/1.97)+"px";
+	}
+	this.collides = function(ball){
+		var dX = ball.position.x-this.position.x;
+		var dY = ball.position.y-this.position.y;
+		var distance = Math.sqrt(dY*dY+dX*dX);
+		var summedRadiuses = (parseInt(this.div.style.fontSize)/9.3 + parseInt(ball.div.style.fontSize)/9.3)/2;
+		if(distance <= summedRadiuses)
+			return summedRadiuses - distance;
+		else 
+			return false;
+	}
+	this.resolveCollision = function(ball){
+		var normal = new Vector( ball.position.x - this.position.x, ball.position.y - this.position.y );
+		var unitNormal = normal.makeUnitVector();
+		var unitTangent = new Vector(-unitNormal.y, unitNormal.x);
+		var initialVelocity1 = this.speed;
+		var initialVelocity2 = ball.speed;
+		
+		var vi1n = initialVelocity1.dotProduct(unitNormal);//proiectia primei viteze pe vectorul tangent
+		var vi1t = initialVelocity1.dotProduct(unitTangent);//proiectia celei de-a 2-a viteze pe vectorul tangent
+		
+		var vi2n = initialVelocity2.dotProduct(unitNormal);//proiectia primei viteze pe vectorul normal
+		var vi2t = initialVelocity2.dotProduct(unitTangent);//proiectia celei de-a 2-a viteze pe vectorul normal
+		
+		//Faza de rezolvare a coliziunii
+		var vf1t = vi1t;//Proiectiile vitezelor pe vectorul tangent raman constante
+		var vf2t = vi2t;
+		
+		//Proiectiile vitezelor pe vectorul normal sufera o coliziune monodimensionala
+		//Formulele folosite sunt pastrarea inrtiei totale a sistemului: m1v1 + m2v2 = m1v1` + m2v2`
+		// si pastrarea energiei cinetice totale: (1/2)*m1v1^2 + (1/2)*m2v2^2 = (1/2)*m1v1`^2 + (1/2)*m2v2`^2
+		//rezolvand sistemul de ecuatii de mai sus obtinem:
+		vf1n = (vi1n * (this.mass - ball.mass) + 2 * ball.mass * vi2n) / (this.mass + ball.mass);
+		vf2n = (vi2n * (ball.mass - this.mass) + 2 * this.mass * vi1n) / (this.mass + ball.mass);
+		
+		//Acuma transformam scalari in vectori
+		var vector1Normal = unitNormal.multiply(vf1n);
+		var vector2Normal = unitNormal.multiply(vf2n);
+		var vector1Tangent = unitTangent.multiply(vf1t);
+		var vector2Tangent = unitTangent.multiply(vf2t);
+		
+		//Dupa ce am terminat toate calculele, atribuim vitezelor noile valori
+		this.speed = new Vector(vector1Normal.x + vector1Tangent.x, vector1Normal.y + vector1Tangent.y);
+		ball.speed = new Vector(vector2Normal.x + vector2Tangent.x, vector2Normal.y + vector2Tangent.y);
+	}
+	this.position = new Vector(x,y);
+	this.newPosition = new Vector(x,y);
+	this.speed = new Vector(0,0);
+	this.mass=0.5;
+	this.id = currID++;
+	this.fixed = false;
+	this.div = document.createElement("div");
+	this.div.innerHTML = "&#183;";
+	this.div.style.position = "fixed";
+	this.div.style.fontSize = "100px";
+	this.div.style.visible = "false";
+	this.div.style.color = "rgba(0,255,0,0.5)";
+	this.div.style.zIndex = "-1";
+	//this.div.style.textShadow = "0 0 1px #888"
+	this.div.style.visibility = "hidden";
+	bod.appendChild(this.div);
+	this.div.style.visibility = "visible";
+	this.makePosition();
+}
+function step() {
+	if (!this.fixed) {
+		var fgX = 0;
+		var fgY = 0;
+		for(var i = 0; i < balls.length; i++) {
+			if (balls[i] == this || typeof balls[i] == "undefined") continue;
+			var dX = balls[i].position.x-this.position.x;
+			var dY = balls[i].position.y-this.position.y;
+			var theta = Math.atan2(dY,dX);//unghiul dintre bile
+			var rsq = dY*dY+dX*dX
+			var collision = this.collides(balls[i]);//verificam deca exista coliziune
+			if ( collision ) {
+				var ratio = 1 / (this.mass + balls[i].mass);//daca bilele se ciocnesc, le mutam mai departe una de alta proportional cu masele lor astfel incat sa nu se mai atinga
+				this.position.x = this.position.x-Math.cos(theta)*((collision)*(balls[i].mass*ratio) );
+				this.position.y = this.position.y-Math.sin(theta)*((collision)*(balls[i].mass*ratio) );
+				this.newPosition = this.position;
+				balls[i].position.x = balls[i].position.x+Math.cos(theta)*((collision)*(this.mass*ratio) );
+				balls[i].position.y = balls[i].position.y+Math.sin(theta)*((collision)*(this.mass*ratio) );
+				balls[i].newPosition = balls[i].position;
+				this.makePosition();
+				balls[i].makePosition();
+				this.resolveCollision(balls[i]);
+				rsq = Math.pow((parseInt(this.div.style.fontSize)/9.3 + parseInt(balls[i].div.style.fontSize)/9.3)/2,2);
+			}
+			var fg = G*this.mass*balls[i].mass/(rsq);//formula atractiei gravitationale
+			fgX += fg*Math.cos(theta);//proiectiile fortei gravitationale pe cele 2 axe
+			fgY += fg*Math.sin(theta);
+		}
+//		var accx = fgX/this.mass;
+//		var accy = fgY/this.mass;
+//		this.newPosition.x += accx * mspf * mspf/2 + this.speed.x * mspf;//a*t^2 + v*t + x(formula noii pozitii din acceleratie si viteza)
+//		this.newPosition.y += accy * mspf * mspf/2 + this.speed.y * mspf;
+//		this.speed.x += accx * mspf;
+//		this.speed.y += accy * mspf;
+		this.speed.x += (fgX/this.mass)*(mspf);//inmultim acceleratia cu timpul care a trecut ca sa obtinem viteza
+		this.speed.y += (fgY/this.mass)*(mspf);
+		this.newPosition.x += this.speed.x*mspf;//inmultim viteza cu timpul ca sa obtinem noua pozitie
+		this.newPosition.y += this.speed.y*mspf;
+		
+		if (this.newPosition.x < 25) {
+			this.newPosition.x = 25;
+			this.speed.x = 0;
+		}
+		if (this.newPosition.y < 25) {
+			this.newPosition.y = 25;
+			this.speed.y = 0;
+		}
+		
+		if (this.newPosition.x > wWidth-25) {
+			this.newPosition.x = wWidth-25;
+			this.speed.x = 0;
+		}
+		if (this.newPosition.y > wHeight-25) {
+			this.newPosition.y = wHeight-25;
+			this.speed.y = 0;
+		}	
+	}
+}
+Ball.prototype.step=step;
+function loop() {
+	for(var i = 0; i < balls.length; i++) {
+		if( typeof balls[i] !== "undefined")
+			balls[i].step();
+	}
+	for(var i = 0; i<balls.length; i++){
+		if( typeof balls[i] !== "undefined"){
+			balls[i].position = balls[i].newPosition;
+			balls[i].makePosition();
+		}
+	}
+	if(autorun)
+		setTimeout("loop()",mspf);
+}
+
+function giveCoords(e){
+	if (e.pageX || e.pageY) 	{
+		posx = e.pageX;
+		posy = e.pageY;
+	}
+	else if (e.clientX || e.clientY) 	{
+		posx = e.clientX + document.body.scrollLeft
+			+ document.documentElement.scrollLeft;
+		posy = e.clientY + document.body.scrollTop
+			+ document.documentElement.scrollTop;
+	}
+	newBall.position =  new Vector(posx,posy);
+	newBall.newPosition = newBall.position;
+	newBall.makePosition();
+}
+
+function setBallSize(){
+	if(parseInt(newBall.div.style.fontSize) > 1000){
+		increment = -10;
+	}
+	if(parseInt(newBall.div.style.fontSize) == 10){
+		increment = 10;
+	}
+	newBall.div.style.fontSize = (parseInt(newBall.div.style.fontSize) + increment) + "px";
+	newBall.position.x = posx;
+	newBall.position.y = posy;
+	newBall.makePosition();
+}
+
+function startClick(e) {
+	clickX = 0;
+	clickY = 0;
+	if (!e)var e = window.event;
+	if (e.pageX || e.pageY) 	{
+		clickX = e.pageX;
+		clickY = e.pageY;
+	}
+	else if (e.clientX || e.clientY) 	{
+		clickX = e.clientX + document.body.scrollLeft
+			+ document.documentElement.scrollLeft;
+		clickY = e.clientY + document.body.scrollTop
+			+ document.documentElement.scrollTop;
+	}
+	
+	posx = clickX;
+	posy = clickY;
+	newBall = new Ball(clickX,clickY);
+	//newBall.div.onmousemove = giveCoords;
+	increment = 10;
+	t = setInterval(setBallSize,10);
+	
+}
+function endClick(e) {
+	clearInterval(t);
+	var posx = 0;
+	var posy = 0;
+	if (!e) var e = window.event;
+	if (e.pageX || e.pageY) 	{
+		posx = e.pageX;
+		posy = e.pageY;
+	}
+	else if (e.clientX || e.clientY) 	{
+		posx = e.clientX + document.body.scrollLeft
+			+ document.documentElement.scrollLeft;
+		posy = e.clientY + document.body.scrollTop
+			+ document.documentElement.scrollTop;
+	}
+	var end = balls.length;
+	newBall.mass = Math.round((Math.pow(parseInt(newBall.div.style.fontSize),3)*Math.PI)/6 * Math.pow(10,-5))/10;
+	newBall.div.onmousemove = null;
+	balls[end] = newBall;
+	balls[end].speed.x = (posx-clickX)*0.01;
+	balls[end].speed.y = (posy-clickY)*0.01;
+}
+function keyPress(e) {
+	if (!e) var e = window.event;
+	if (String.fromCharCode(e.charCode).toLowerCase() == 'x') {
+//		var temp = balls[0];
+		for (var i = 0; i < balls.length; i++) {
+			bod.removeChild(balls[i].div);
+		}
+		balls.length = 0;
+//		balls[0] = temp;
+	}
+	else if(String.fromCharCode(e.charCode).toLowerCase() == 's'){
+		autorun = false;
+		loop();
+	}
+	else if(String.fromCharCode(e.charCode).toLowerCase() == 'a'){
+		autorun = true;
+		loop();
+	}
+	else if(String.fromCharCode(e.charCode).toLowerCase() == 'f'){
+		if(mspf>4)
+			mspf--;
+	}
+	else if(String.fromCharCode(e.charCode).toLowerCase() == 'w'){
+		mspf++;
+	}
+}
+function hideIntro(){
+	document.getElementById('content-wrapper').style.display = 'none';
+}
+</script>
+</head>
+<body onLoad="initGravity()" onMouseDown="startClick(event);" onMouseUp="endClick(event);" onKeyPress="keyPress(event);" style="width:100%; height:100%;">
+
+<div id="content-wrapper">
+	<div id="content">
+	
+	<h1 style = "text-align:center">Simulator gravitatie & coliziuni</h1>
+	
+	<p>
+    Proiect la Modele Si Tehnici De Programare In Realitatea Virtuala
+	</p>
+    <p>
+    	Instructiuni:<br>
+        - Aplicatia e suportata pe Chrome si Firefox<br>
+        - Pentru a introduce o noua bila/planeta apasati cu mouse-ul si tineti apasat pana ajungeti la dimensiunea dorita<br>
+        - Pentru a-i da bilei nou introduse o viteza intr-o anumita directie trageti de mouse in directia dorita inainte de a da drumul la buton<br>
+        - Pentru eliberarea fundalului apasa "x"<br>
+        - Pentru marirea frame-rate-ului apasa "f"(default=4ms/frame adica minim)<br>
+        - Pentru scaderea frame-rate-ului apasa "w"<br>
+        - Pentru a rula scriptul frame cu frame apasa "s"<br>
+        - Pentru a lasa scriptul sa ruleze automat apasa "a"<br>
+    </p>
+    <p>
+    	Ionescu Horia-Adrian(Grupa 506 Inginerie Software)
+    </p>
+    <button onClick = "hideIntro()">M-am prins</button>
+	</div>
+</div>
+
+</body>
+</html>
